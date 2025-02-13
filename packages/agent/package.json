@@ -7,7 +7,7 @@
     "start": "node ./dist/index.js",
     "dev": "pnpm run build && pnpm run start"
   },
-  "exports":{
+  "exports": {
     "./openaiApiKey": "./src/index.ts"
   },
   "devDependencies": {
@@ -19,9 +19,11 @@
   "description": "",
   "dependencies": {
     "@langchain/community": "^0.3.29",
+    "@langchain/core": "^0.3.39",
     "@langchain/openai": "^0.4.3",
     "dotenv": "^16.4.7",
     "langchain": "^0.3.15",
+    "pg": "^8.13.3",
     "sqlite3": "^5.1.7",
     "typeorm": "^0.3.20"
   }
