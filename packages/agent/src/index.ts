@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
-dotenv.config();
+import path from "path"
+dotenv.config({path:path.resolve(__dirname,"../.env")});
 import { DataSource } from "typeorm";
 import { SqlDatabase } from "langchain/sql_db";
 import { ChatOpenAI } from "@langchain/openai";
@@ -26,6 +27,7 @@ export async function unifiedQueryChain(question:string) {
     2. If you determine that answering the question would require data modifications, output "false"
     3. The output must contain **only the SQL query code**. Do not include any additional explanation or commentary.
     4. return the SQl query without any markdown formatting or code fences, do not add any new line characters.
+    5. If the query is related to the listing the contents or rows, **strictly limit the results by 3**.
     ------------
     SCHEMA: {schema}
     ------------
@@ -48,14 +50,13 @@ export async function unifiedQueryChain(question:string) {
       question: () => question,
     },
     queryPrompt,
-    new ChatOpenAI({temperature:0,verbose:true,modelName:"gpt-4o-mini-2024-07-18"}),
+    new ChatOpenAI({temperature:0,verbose:false,modelName:"gpt-4o-mini-2024-07-18"}),
     new StringOutputParser(),
     {
       transformOutput: (output) => ({query:output }),
     },
     {
       executeQuery: async (context) => {
-        console.log(context);
         if (context.query === "false") {
           throw new Error("Query generation failed. No valid query.");
         }
@@ -78,7 +79,7 @@ export async function unifiedQueryChain(question:string) {
       question: () => question 
     },
     finalResponsePrompt,
-    new ChatOpenAI({modelName:"gpt-4o-mini-2024-07-18",temperature:0,verbose:true}),
+    new ChatOpenAI({modelName:"gpt-4o-mini-2024-07-18",temperature:0,verbose:false}),
     new StringOutputParser(),
   ]);   
   return await unifiedChain.invoke({ question });
