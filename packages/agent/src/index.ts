@@ -11,6 +11,8 @@ import { StringOutputParser } from "@langchain/core/output_parsers";
 
 export const openaiApiKey = process.env.OPENAI_API_KEY || "";
 
+
+let shouldbetrue:boolean = true
 export async function unifiedQueryChain(question: string) {
     const datasource = new DataSource({
         type: "postgres",
@@ -57,6 +59,29 @@ export async function unifiedQueryChain(question: string) {
      SQL QUERY: {query}
      -------------`);
 
+     const finalresponse = async (context: any) => {
+        console.log("Final Response Context:", context); // Debug log
+    
+        if (!context.shouldbetrue) {
+            throw new Error("Query generation failed. No valid query.");
+        }
+    
+        const finalChain = RunnableSequence.from([
+            finalResponsePrompt,
+            new ChatOpenAI({ modelName: "gpt-4o-mini-2024-07-18", temperature: 0, verbose: true }),
+            new StringOutputParser(),
+        ]);
+    
+        return await finalChain.invoke({
+            question: context.question,
+            query: context.query,
+            response: context.response
+        });
+    };
+    
+    
+    
+
     const retryQuery = async (hint: string, query: string): Promise<string> => {
         const retryChain = RunnableSequence.from([
             {
@@ -70,7 +95,8 @@ export async function unifiedQueryChain(question: string) {
 
         return await retryChain.invoke({});
     };
-
+    
+    
     const unifiedChain = RunnableSequence.from([
         {
             schema: async () => db.getTableInfo(),
@@ -84,13 +110,16 @@ export async function unifiedQueryChain(question: string) {
         },
         {
             executeQuery: async (context) => {
-                if (context.query === "false") {
-                    throw new Error("Query generation failed. No valid query.");
+                console.log("Before Executing Query:", context); // Debug log
+    
+                if (context.transformOutput.query === "false") {
+                    return { ...context, shouldbetrue: false, queryResponse: "Invalid Query" };  
                 }
+    
                 let generatedQuery = context.transformOutput.query;
                 const queryArray = generatedQuery.split(';');
                 let queryResponse = "";
-
+    
                 for (let i = 0; i < queryArray.length; i++) {
                     let attempt = 0;
                     while (attempt < 3) { 
@@ -109,19 +138,23 @@ export async function unifiedQueryChain(question: string) {
                         attempt++;
                     }
                 }
-
-                return { ...context, queryResponse };
-            },
+    
+                console.log("Query Execution Completed:", { queryResponse, shouldbetrue: true }); // Debug log
+    
+                return { ...context, queryResponse, shouldbetrue: true }; 
+            }
         },
         {
-            query: (context) => context.executeQuery.transformOutput.query,
-            response: (context) => context.executeQuery.queryResponse,
-            question: () => question
+            query: (context) => context.executeQuery?.transformOutput?.query,
+            response: (context) => context.executeQuery?.queryResponse,
+            question: () => question,
+            shouldbetrue: (context) => context.executeQuery?.shouldbetrue ?? false,  // Ensure shouldbetrue is passed
         },
-        finalResponsePrompt,
-        new ChatOpenAI({ modelName: "gpt-4o-mini-2024-07-18", temperature: 0, verbose: false }),
-        new StringOutputParser(),
+        {
+            finalresponse: async (context) => await finalresponse(context)
+        }
     ]);
-
     return await unifiedChain.invoke({ question });
 }
+
+
