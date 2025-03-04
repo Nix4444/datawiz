@@ -4,6 +4,7 @@ import Button from "./button";
 import Modal from "./modal";
 import axios from "axios";
 
+
 export default function Sidebar() {
   const [isHidden, setIsHidden] = useState(false);
   const [databaseInfo, setDatabaseInfo] = useState<string[]>([]);

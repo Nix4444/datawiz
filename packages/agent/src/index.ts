@@ -4,15 +4,19 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 import { DataSource } from "typeorm";
 import { SqlDatabase } from "langchain/sql_db";
-import { ChatOpenAI } from "@langchain/openai";
+import { Ollama } from "@langchain/ollama";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 
 export const openaiApiKey = process.env.OPENAI_API_KEY || "";
-
-
-let shouldbetrue:boolean = true
+const deepSeekModel= new Ollama({
+    model:"llama3",
+    baseUrl:process.env.OLLAMA_ENNDPOINT,
+    temperature:0,
+    verbose:true
+    
+})
 export async function unifiedQueryChain(question: string) {
     const datasource = new DataSource({
         type: "postgres",
@@ -26,7 +30,7 @@ export async function unifiedQueryChain(question: string) {
 
     const db = await SqlDatabase.fromDataSourceParams({ appDataSource: datasource });
 
-    const queryPrompt = PromptTemplate.fromTemplate(`Based on the provided SQL table schema below, write a SQL query that would answer the user's question.
+    const queryPrompt = PromptTemplate.fromTemplate(`Based on the provided SQL table schema below, write a SQL query that would answer the user's question without showing any internal reasoning or chain-of-thought.
     IMPORTANT:
     1. The SQL query **must be strictly read-only**. You are ONLY permitted to use SELECT statements (and safe clauses like WITH). **Do not include any DML commands** such as INSERT, UPDATE, DELETE, MERGE, or any other commands that modify data.
     2. If you determine that answering the question would require data modifications, output "false"
@@ -39,7 +43,7 @@ export async function unifiedQueryChain(question: string) {
     QUESTION: {question}
     ------------`);
 
-    const finalResponsePrompt = PromptTemplate.fromTemplate(`Based on the table schema below, question, SQL query, and SQL response, write a natural language response:
+    const finalResponsePrompt = PromptTemplate.fromTemplate(`Based on the table schema below, question, SQL query, and SQL response, write a natural language response without showing any internal reasoning or chain-of-thought.
     ------------
     QUESTION: {question}
     ------------
@@ -49,7 +53,7 @@ export async function unifiedQueryChain(question: string) {
     ------------
     NATURAL LANGUAGE RESPONSE:`);
 
-    const retryResponsePrompt = PromptTemplate.fromTemplate(`Based on the hint provided, modify the SQL query on which an error was encountered and return the corrected query:
+    const retryResponsePrompt = PromptTemplate.fromTemplate(`Based on the hint provided, modify the SQL query on which an error was encountered and return the corrected query. without showing any internal reasoning or chain-of-thought
      IMPORTANT:
      1. The output must contain **only the SQL query code**. Do not include any additional explanation or commentary.
      2. Return the SQL query without any markdown formatting or code fences, do not add any new line characters.
@@ -60,18 +64,14 @@ export async function unifiedQueryChain(question: string) {
      -------------`);
 
      const finalresponse = async (context: any) => {
-        console.log("Final Response Context:", context); // Debug log
-    
-        if (!context.shouldbetrue) {
+        if (!context.queryBool) {
             throw new Error("Query generation failed. No valid query.");
         }
-    
         const finalChain = RunnableSequence.from([
             finalResponsePrompt,
-            new ChatOpenAI({ modelName: "gpt-4o-mini-2024-07-18", temperature: 0, verbose: true }),
+            deepSeekModel,
             new StringOutputParser(),
         ]);
-    
         return await finalChain.invoke({
             question: context.question,
             query: context.query,
@@ -89,7 +89,7 @@ export async function unifiedQueryChain(question: string) {
                 query: () => query
             },
             retryResponsePrompt,
-            new ChatOpenAI({ modelName: "gpt-4o-mini-2024-07-18", temperature: 0, verbose: false }),
+            deepSeekModel,
             new StringOutputParser(),
         ]);
 
@@ -103,17 +103,16 @@ export async function unifiedQueryChain(question: string) {
             question: () => question,
         },
         queryPrompt,
-        new ChatOpenAI({ temperature: 0, verbose: true, modelName: "gpt-4o-mini-2024-07-18" }),
+        deepSeekModel,
         new StringOutputParser(),
         {
             transformOutput: (output) => ({ query: output }),
         },
         {
             executeQuery: async (context) => {
-                console.log("Before Executing Query:", context); // Debug log
-    
                 if (context.transformOutput.query === "false") {
-                    return { ...context, shouldbetrue: false, queryResponse: "Invalid Query" };  
+                    const queryBool = false;
+                    return { ...context, queryBool, queryResponse: "Invalid Query" }
                 }
     
                 let generatedQuery = context.transformOutput.query;
@@ -138,17 +137,14 @@ export async function unifiedQueryChain(question: string) {
                         attempt++;
                     }
                 }
-    
-                console.log("Query Execution Completed:", { queryResponse, shouldbetrue: true }); // Debug log
-    
-                return { ...context, queryResponse, shouldbetrue: true }; 
+                return { ...context, queryResponse}; 
             }
         },
         {
             query: (context) => context.executeQuery?.transformOutput?.query,
             response: (context) => context.executeQuery?.queryResponse,
             question: () => question,
-            shouldbetrue: (context) => context.executeQuery?.shouldbetrue ?? false,  // Ensure shouldbetrue is passed
+            queryBool: (context) => context.executeQuery?.queryBool ?? true
         },
         {
             finalresponse: async (context) => await finalresponse(context)
