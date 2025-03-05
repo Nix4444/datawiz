@@ -10,8 +10,8 @@ import { RunnableSequence } from "@langchain/core/runnables";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 
 export const openaiApiKey = process.env.OPENAI_API_KEY || "";
-const deepSeekModel= new Ollama({
-    model:"llama3",
+const LLM= new Ollama({
+    model:"llama3.2:3b",
     baseUrl:process.env.OLLAMA_ENNDPOINT,
     temperature:0,
     verbose:true
@@ -69,7 +69,7 @@ export async function unifiedQueryChain(question: string) {
         }
         const finalChain = RunnableSequence.from([
             finalResponsePrompt,
-            deepSeekModel,
+            LLM,
             new StringOutputParser(),
         ]);
         return await finalChain.invoke({
@@ -89,7 +89,7 @@ export async function unifiedQueryChain(question: string) {
                 query: () => query
             },
             retryResponsePrompt,
-            deepSeekModel,
+            LLM,
             new StringOutputParser(),
         ]);
 
@@ -103,7 +103,7 @@ export async function unifiedQueryChain(question: string) {
             question: () => question,
         },
         queryPrompt,
-        deepSeekModel,
+        LLM,
         new StringOutputParser(),
         {
             transformOutput: (output) => ({ query: output }),

@@ -11,9 +11,10 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@repo/icons":"workspace:*",
-    "@repo/common":"workspace:*",
+    "@repo/common": "workspace:*",
+    "@repo/icons": "workspace:*",
     "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
